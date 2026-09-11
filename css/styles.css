@@ -1,0 +1,865 @@
+/* ----------------------------------------------------
+ * Interactive 16:9 Relief Map & Event Visualizer Styles
+ * ---------------------------------------------------- */
+
+:root {
+  --bg-page: #060911;
+  --bg-bar: rgba(11, 17, 30, 0.98);
+  --bg-surface: rgba(17, 24, 39, 0.94);
+  --bg-surface-hover: rgba(31, 41, 55, 0.98);
+  --border-color: rgba(55, 65, 81, 0.75);
+  --border-glow: rgba(16, 185, 129, 0.35);
+  --accent-emerald: #10b981;
+  --accent-sky: #38bdf8;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto !important;
+  scroll-behavior: smooth;
+  font-family: var(--font-main);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------- КАРКАС СТРАНИЦЫ С КАРТОЙ И СЕКЦИЕЙ ПОДРОБНОСТЕЙ ------------------- */
+#app-layout {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #060911;
+}
+
+/* 1. ЭКРАН КАРТЫ (РОVНО 100VH НА ВЕСЬ ПЕРВЫЙ ЭКРАН) */
+.map-screen-hero {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ВЕРХНЯЯ ПОЛОСА (HEADER) */
+.top-nav-bar {
+  height: 56px;
+  width: 100%;
+  background: var(--bg-bar);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 5000;
+  flex-shrink: 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* КНОПКА "i" (ИНФОРМАЦИЯ) */
+.info-circle-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.info-circle-btn:hover {
+  background: rgba(16, 185, 129, 0.4);
+  border-color: #34d399;
+  transform: scale(1.15);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+/* СРЕДНЯЯ ОБЛАСТЬ С КАРТОЙ (ЗАНИМАЕТ 100% ВЫСОТЫ МЕЖДУ ПОЛОСАМИ) */
+.map-viewport-wrapper {
+  flex: 1 1 0%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: block;
+  background: #090e1a;
+}
+
+#map {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: #090e1a;
+  z-index: 1;
+}
+
+/* НИЖНЯЯ ПОЛОСА (FOOTER) */
+.bottom-controls-bar {
+  height: 56px;
+  width: 100%;
+  background: var(--bg-bar);
+  border-top: 1px solid var(--border-color);
+  backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 50;
+  flex-shrink: 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* ------------------- LEAFLET ЭЛЕМЕНТЫ & ПОЛНАЯ ЗАМЕНА БЕЛОГО ЦВЕТА ------------------- */
+.leaflet-container {
+  background-color: #0b1120 !important;
+  font-family: inherit !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.leaflet-tile-pane {
+  background-color: #0b1120 !important;
+}
+
+/* 1. РЕЖИМ ПО УМОЛЧАНИЮ: ТЁМНЫЙ ГРАФИТОВО-СИНИЙ РЕЛЬЕФ (0% БЕЛОГО ЦВЕТА, НЕ РЕЖЕТ ГЛАЗА) */
+.physical-layer-tiles.dark-mode,
+.physical-layer-tiles:not(.warm-mode) {
+  /*
+   * - invert(92%): превращает белый (#ffffff) в глубокий темный оттенок графита (#141923)
+   * - hue-rotate(195deg): восстанавливает цвета морей в глубокий океанический синий, а растительность - в хвойный зеленый
+   * - brightness(84%): комфортное мягкое свечение без слепящих вспышек
+   * - contrast(112%): надписи и контуры рельефа идеально различимы
+   * - saturate(115%): сочные натуральные цвета
+   */
+  filter: invert(92%) hue-rotate(195deg) brightness(84%) contrast(112%) saturate(115%) !important;
+}
+
+/* 2. АЛЬТЕРНАТИВНЫЙ РЕЖИМ: МЯГКИЙ ТЁПЛЫЙ ПЕСОК (ВИНТАЖНЫЙ ПЕРГАМЕНТ БЕЗ БЕЛИЗНЫ) */
+.physical-layer-tiles.warm-mode {
+  /* Белый заменяется на приятный мягкий бежево-песочный рельеф */
+  filter: brightness(0.72) contrast(1.18) sepia(0.38) saturate(1.2) hue-rotate(-12deg) !important;
+}
+
+/* 3. СПУТНИКОВЫЙ СЛОЙ (Натуральные фотоснимки) */
+.satellite-layer-tiles {
+  filter: brightness(0.96) contrast(1.06) saturate(1.05) !important;
+}
+
+/* КНОПКА СМЕНЫ ТОНА В НИЖНЕЙ ПАНЕЛИ */
+.tone-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(17, 24, 39, 0.85);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+}
+
+.tone-toggle-btn:hover {
+  background: rgba(31, 41, 55, 0.95);
+  border-color: var(--accent-emerald);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+/* ПОЛНОСТЬЮ СКРЫВАЕМ ПАНЕЛЬКУ СПРАВА СНИЗУ */
+.leaflet-control-attribution {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(12px);
+  margin-right: 18px !important;
+  margin-bottom: 18px !important;
+}
+
+.leaflet-control-zoom a {
+  background-color: rgba(17, 24, 39, 0.94) !important;
+  color: #e5e7eb !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  transition: all 0.2s ease;
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  font-size: 16px !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #1f2937 !important;
+  color: #10b981 !important;
+}
+
+/* ------------------- КАСТОМНЫЕ КЛАСТЕРЫ МАРКЕРОВ ------------------- */
+.custom-cluster-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-cluster-marker {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.2s ease;
+}
+
+.custom-cluster-marker:hover {
+  transform: scale(1.1);
+  z-index: 1000 !important;
+}
+
+.cluster-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1.5px solid #475569;
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+
+.custom-cluster-marker:hover .cluster-inner {
+  border-color: #94a3b8;
+  background: #334155;
+}
+
+.cluster-pulse {
+  display: none;
+}
+
+/* ------------------- КАСТОМНЫЕ ОДИНОЧНЫЕ МАРКЕРЫ ------------------- */
+.custom-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.map-marker-container {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.2s ease;
+}
+
+.map-marker-container:hover {
+  transform: scale(1.15);
+  z-index: 1000 !important;
+}
+
+.marker-pin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #0f172a;
+  border: 1.5px solid var(--marker-color, #dc2626);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+
+.marker-icon-inner {
+  font-size: 10px;
+  line-height: 1;
+  color: #f1f5f9;
+  font-weight: bold;
+}
+
+.marker-pulse {
+  display: none;
+}
+
+.map-marker-container.is-selected .marker-pin {
+  transform: scale(1.2);
+  border-color: #ffffff;
+  background: #1e293b;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35), 0 2px 8px rgba(0,0,0,0.8);
+}
+
+/* ------------------- ТУЛТИПЫ КАРТЫ ------------------- */
+.leaflet-custom-tooltip {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.leaflet-tooltip-top:before {
+  border-top-color: rgba(15, 23, 42, 0.96) !important;
+}
+
+.custom-tooltip .tooltip-category {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.custom-tooltip .tooltip-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.custom-tooltip .tooltip-location {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* ------------------- ПОИСК ------------------- */
+.search-wrapper {
+  position: relative;
+  width: 320px;
+  z-index: 5100;
+}
+
+.search-input-box {
+  width: 100%;
+  background: rgba(31, 41, 55, 0.85);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
+  color: #f9fafb;
+  padding: 8px 34px 8px 34px;
+  border-radius: 12px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-input-box:focus {
+  border-color: var(--accent-emerald);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25), 0 8px 25px rgba(0, 0, 0, 0.5);
+  background: rgba(31, 41, 55, 0.98);
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  pointer-events: none;
+  font-size: 13px;
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 11px;
+  padding: 4px;
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 360px;
+  background: rgba(17, 24, 39, 0.98);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(20px);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 20px rgba(16, 185, 129, 0.2);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 5200;
+}
+
+.search-result-item {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(55, 65, 81, 0.4);
+  transition: background 0.15s ease;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.result-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f9fafb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 1px;
+}
+
+/* ------------------- ПЕРЕКЛЮЧАТЕЛЬ 2 СЛОЕВ КАРТЫ ------------------- */
+.layer-switcher-pair {
+  display: inline-flex;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.map-layer-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.map-layer-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.map-layer-btn.active {
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #475569;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.control-btn {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border-color);
+  color: #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.control-btn:hover {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f8fafc;
+}
+
+/* ------------------- МОДАЛЬНЫЕ ОКНА ------------------- */
+.modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 100000;
+}
+
+.modal-input {
+  width: 100%;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #f1f5f9;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.modal-input:focus {
+  border-color: #64748b;
+}
+
+/* ------------------- СЕКЦИЯ ДЕТАЛЬНОЙ ИНФОРМАЦИИ (DETAILS SECTION) ------------------- */
+.details-section-wrapper {
+  width: 100%;
+  background: #090e17;
+  border-top: 1px solid var(--border-color);
+  position: relative;
+  z-index: 10;
+}
+
+.details-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 20px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+}
+
+.details-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+}
+
+.scroll-top-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scroll-top-btn:hover {
+  background: #334155;
+  color: #fff;
+  border-color: #64748b;
+}
+
+.section-animation-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #080c14;
+  border: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+}
+
+.anim-card-header {
+  padding: 10px 14px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.anim-card-footer {
+  padding: 8px 14px;
+  background: #0f172a;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.action-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: #334155;
+  border-color: #64748b;
+  color: #fff;
+}
+
+/* ------------------- АВТОРИЗАЦИЯ И УПРАВЛЕНИЕ МЕТКАМИ ------------------- */
+.auth-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-login-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.auth-login-trigger-btn:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #6ee7b7;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.auth-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.auth-user-chip.is-admin {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(6, 78, 59, 0.25);
+}
+
+.auth-role-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.auth-role-pill.admin {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.auth-role-pill.user {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.auth-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.auth-logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.auth-action-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  color: #cbd5e1;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.auth-action-link-btn:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.auth-tab-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-tab-btn.active {
+  border-bottom-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.action-btn-edit {
+  background: rgba(120, 53, 15, 0.25) !important;
+  border: 1px solid rgba(245, 158, 11, 0.5) !important;
+  color: #fbbf24 !important;
+}
+
+.action-btn-edit:hover {
+  background: rgba(180, 83, 9, 0.35) !important;
+  border-color: #f59e0b !important;
+  color: #fef3c7 !important;
+}
+
+.action-btn-delete {
+  background: rgba(127, 29, 29, 0.25) !important;
+  border: 1px solid rgba(239, 68, 68, 0.5) !important;
+  color: #f87171 !important;
+}
+
+.action-btn-delete:hover {
+  background: rgba(185, 28, 28, 0.35) !important;
+  border-color: #ef4444 !important;
+  color: #fee2e2 !important;
+}
+
+/* ------------------- АДАПТИВНОСТЬ ------------------- */
+@media (max-width: 768px) {
+  .top-nav-bar {
+    height: auto;
+    padding: 10px 14px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .search-wrapper {
+    width: 100%;
+  }
+
+  .auth-bar-wrapper {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .bottom-controls-bar {
+    height: auto;
+    padding: 10px 14px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .details-card {
+    padding: 18px;
+  }
+}
+
+

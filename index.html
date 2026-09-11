@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Интерактивная карта Барановичского региона, Беларусь</title>
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  
+  <!-- Leaflet MarkerCluster (Кластеризация маркеров со счетчиком) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-slate-950 text-slate-100 select-none">
+
+  <div id="app-layout">
+    <!-- ================= 1. ЭКРАН КАРТЫ НА ВЕСЬ ПЕРВЫЙ ЭКРАН (100VH) ================= -->
+    <div class="map-screen-hero">
+      <!-- ВЕРХНЯЯ ПОЛОСА (HEADER BAR) -->
+      <header class="top-nav-bar">
+        <!-- Брендинг / Логотип + Кнопка "i" -->
+        <div class="flex items-center gap-3">
+          <div class="w-7 h-7 rounded bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-semibold shadow-sm">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-sm font-semibold tracking-tight text-white">Карта боевых действий и партизанского движения</h1>
+              
+              <!-- Кружочек с буквой "i" (Инфо) -->
+              <button id="open-info-modal-btn" class="info-circle-btn" title="Информация о карте">
+                i
+              </button>
+
+              <span id="total-events-count" class="text-[10px] bg-slate-900 text-slate-300 border border-slate-700 px-2 py-0.5 rounded font-medium">15 локаций</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Барановичский, Дятловский и прилегающие районы • 1942–1944 гг.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Поисковая строка -->
+          <div class="search-wrapper">
+            <svg class="search-icon w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input 
+              type="text" 
+              id="search-input" 
+              class="search-input-box" 
+              placeholder="Поиск по событиям и объектам..." 
+              autocomplete="off"
+            />
+            <button id="search-clear-btn" class="search-clear-btn hidden" title="Очистить поиск">✕</button>
+            
+            <!-- Выпадающий список результатов -->
+            <div id="search-results" class="search-results-dropdown hidden"></div>
+          </div>
+
+          <!-- Блок авторизации / Профиль пользователя -->
+          <div id="auth-status-container" class="auth-bar-wrapper flex items-center gap-2">
+            <!-- Заполняется динамически через JS -->
+          </div>
+        </div>
+      </header>
+
+      <!-- СРЕДНЯЯ ОБЛАСТЬ (КАРТА LEAFLET) -->
+      <main class="map-viewport-wrapper">
+        <div id="map"></div>
+      </main>
+
+      <!-- НИЖНЯЯ ПОЛОСА УПРАВЛЕНИЯ КАРТОЙ (FOOTER CONTROLS) -->
+      <footer class="bottom-controls-bar">
+        <!-- Переключатель 2 типов карт (Физическая / Спутник) + Тоновый режим для физической -->
+        <div class="flex items-center gap-3">
+          <div class="layer-switcher-pair">
+            <button class="map-layer-btn active" data-layer="physical" title="Топографическая и дорожная карта">
+              <span>Физическая карта</span>
+            </button>
+            <button class="map-layer-btn" data-layer="satellite" title="Спутниковые снимки высокого разрешения">
+              <span>Спутник</span>
+            </button>
+          </div>
+
+          <!-- Кнопка переключения комфортного оттенка физической карты -->
+          <button id="map-tone-toggle-btn" class="tone-toggle-btn" title="Сменить палитру карты">
+            <span id="map-tone-text">Тёмный рельеф</span>
+          </button>
+        </div>
+
+        <!-- Действия: Сброс зума, Добавление точки и Сброс данных -->
+        <div class="flex items-center gap-2">
+          <button id="reset-view-btn" class="control-btn" title="Вернуться к исходному масштабу">
+            <span>Общий вид</span>
+          </button>
+          <button id="open-add-event-btn" class="control-btn" title="Добавить объект (Требуются права администратора)">
+            <span>Добавить точку</span>
+          </button>
+          <button id="admin-reset-events-btn" class="control-btn hidden text-rose-300 hover:text-rose-200 border-rose-900/50" title="Сбросить все метки к исходным данным">
+            <span>Сброс меток</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- ================= 2. СЕКЦИЯ ДЕТАЛЬНОЙ ИНФОРМАЦИИ ПРИ ВЫБОРЕ ТОЧКИ (НИЖЕ ПЕРВОГО ЭКРАНА) ================= -->
+    <section id="details-section" class="details-section-wrapper">
+      <div class="max-w-6xl mx-auto px-4 py-8">
+        
+        <!-- Состояние: Точка не выбрана (подсказка) -->
+        <div id="details-empty-state" class="details-empty-card">
+          <div class="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-slate-400">
+            <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold text-white mb-1">Выберите точку на карте выше</h3>
+          <p class="text-xs text-slate-400 max-w-md leading-relaxed">
+            Нажмите на любую метку на карте, чтобы изучить подробные исторические сведения, ход боевых действий и тактическую схему событий.
+          </p>
+        </div>
+
+        <!-- Состояние: Точка выбрана (Детальная карточка) -->
+        <div id="details-content-card" class="details-card hidden">
+          <!-- Шапка карточки -->
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div class="flex items-center gap-2.5">
+              <span id="section-category-badge" class="px-2.5 py-1 rounded text-xs font-semibold border">
+                Категория
+              </span>
+              <span id="section-date-badge" class="px-2.5 py-1 rounded text-xs font-medium text-slate-300 bg-slate-900 border border-slate-800">
+                Дата
+              </span>
+            </div>
+
+            <button id="scroll-to-map-btn" class="scroll-top-btn" title="Вернуться к карте">
+              <span>↑</span>
+              <span>Вернуться к карте</span>
+            </button>
+          </div>
+
+          <!-- Основная сетка: 2 колонки -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6">
+            
+            <!-- Левая колонка: Текст, описание, факты -->
+            <div class="lg:col-span-7 flex flex-col gap-5">
+              <div>
+                <h2 id="section-title" class="text-2xl lg:text-3xl font-bold text-white tracking-tight leading-tight">
+                  Заголовок события
+                </h2>
+                <p id="section-subtitle" class="text-sm text-slate-400 font-normal mt-1">
+                  Подзаголовок
+                </p>
+                <div class="flex items-center gap-2 text-xs text-slate-400 mt-3">
+                  <span class="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block"></span>
+                  <span id="section-location" class="font-medium text-slate-300">Локация</span>
+                </div>
+              </div>
+
+              <!-- Краткая сводка / Акцент -->
+              <div class="bg-slate-900/90 border-l-2 border-slate-600 border border-slate-800 rounded-r-lg p-4">
+                <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Краткая сводка</h4>
+                <p id="section-short-desc" class="text-xs text-slate-200 leading-relaxed"></p>
+              </div>
+
+              <!-- Полное описание -->
+              <div class="bg-slate-900/60 border border-slate-800 rounded-lg p-4">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  Историческая справка и ход событий
+                </h3>
+                <p id="section-full-desc" class="text-xs text-slate-300 leading-relaxed space-y-2 whitespace-pre-line"></p>
+              </div>
+
+              <!-- Ключевые факты (Highlights) -->
+              <div id="section-highlights-box" class="bg-slate-900/40 border border-slate-800 rounded-lg p-4">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  Ключевые факты
+                </h3>
+                <ul id="section-highlights-list" class="space-y-1.5"></ul>
+              </div>
+
+              <!-- Координаты и быстрые действия -->
+              <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-500 text-xs">Координаты:</span>
+                  <span id="section-coords-text" class="font-mono text-xs text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">0.0000, 0.0000</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button id="section-copy-coords-btn" class="action-btn" title="Скопировать координаты">
+                    Координаты
+                  </button>
+                  <button id="section-copy-link-btn" class="action-btn" title="Скопировать прямую ссылку">
+                    Ссылка
+                  </button>
+
+                  <!-- Действия администратора (скрыты для обычных пользователей и гостей) -->
+                  <div id="admin-marker-actions" class="flex items-center gap-2 hidden pl-2 border-l border-slate-700">
+                    <button id="section-edit-btn" class="action-btn action-btn-edit text-amber-300 border-amber-500/40 hover:bg-amber-950/40" title="Редактировать эту точку">
+                      ✎ Редактировать
+                    </button>
+                    <button id="section-delete-btn" class="action-btn action-btn-delete text-rose-300 border-rose-500/40 hover:bg-rose-950/40" title="Удалить эту точку">
+                      🗑 Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Правая колонка: 60 FPS Visualizer -->
+            <div class="lg:col-span-5 flex flex-col gap-4">
+              <!-- Canvas Схема -->
+              <div class="section-animation-card">
+                <div class="anim-card-header">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Тактическая схема</span>
+                  </div>
+                  <div class="anim-actions">
+                    <select id="section-anim-speed-select" class="anim-speed-select" title="Скорость">
+                      <option value="0.8">0.8x</option>
+                      <option value="1.0" selected>1.0x</option>
+                      <option value="1.5">1.5x</option>
+                      <option value="2.0">2.0x</option>
+                    </select>
+                    <button id="section-anim-replay-btn" class="anim-btn-small" title="Перезапустить">
+                      Повтор
+                    </button>
+                  </div>
+                </div>
+
+                <div class="relative w-full h-64 bg-slate-950/90">
+                  <canvas id="section-event-canvas" class="w-full h-full block"></canvas>
+                </div>
+
+                <div class="anim-card-footer">
+                  <span id="section-anim-title" class="text-xs text-slate-400 font-medium truncate">Схема</span>
+                  <span class="text-slate-500 text-xs">Интерактивная визуализация</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 4. МОДАЛЬНОЕ ОКНО "ИНФОРМАЦИЯ О КАРТЕ" (КНОПКА "i") ================= -->
+  <div id="info-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-6 h-6 rounded bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center font-semibold text-xs">
+            i
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-white">О карте</h3>
+            <p class="text-[11px] text-slate-400">Справочная информация</p>
+          </div>
+        </div>
+        <button id="close-info-modal-btn" class="text-slate-400 hover:text-white text-sm" title="Закрыть">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-300 leading-relaxed max-h-[65vh] overflow-y-auto pr-1">
+        <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-lg">
+          <h4 class="font-semibold text-slate-200 mb-1">
+            Масштабирование и навигация
+          </h4>
+          <p class="text-slate-400 text-[11.5px]">
+            Карта охватывает Барановичский регион и прилегающие районы с возможностью глубокого приближения вплоть до отдельных дорог, лесных массивов и населенных пунктов.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-lg">
+          <h4 class="font-semibold text-slate-200 mb-1">
+            Слои карты
+          </h4>
+          <ul class="space-y-1 text-slate-400 text-[11.5px] mt-1">
+            <li>• <strong>Физическая карта:</strong> подробная топографическая основа с дорожной сетью и гидрографией.</li>
+            <li>• <strong>Спутник:</strong> детальные фотоснимки местности.</li>
+          </ul>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-lg">
+          <h4 class="font-semibold text-slate-200 mb-1">
+            Группировка меток
+          </h4>
+          <p class="text-slate-400 text-[11.5px]">
+            При отдалении карты близко расположенные объекты объединяются в числовые группы. Нажатие на группу плавно приближает соответствующий сектор.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-lg">
+          <h4 class="font-semibold text-slate-200 mb-1">
+            Исторические данные
+          </h4>
+          <p class="text-slate-400 text-[11.5px]">
+            При выборе метки страница плавно прокручивается к исторической справке с хронологией и описанием хода событий.
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-slate-800 flex justify-end">
+        <button id="confirm-info-modal-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded text-xs border border-slate-700 transition-all">
+          Закрыть
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 5. МОДАЛЬНОЕ ОКНО "ДОБАВИТЬ / РЕДАКТИРОВАТЬ ТОЧКУ" ================= -->
+  <div id="add-event-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <input type="hidden" id="edit-event-id" value="">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 id="modal-event-form-title" class="text-sm font-semibold text-white">Добавить точку на карту</h3>
+        <button id="close-add-modal-btn" class="text-slate-400 hover:text-white text-sm" title="Закрыть">✕</button>
+      </div>
+
+      <p id="modal-event-form-desc" class="text-xs text-slate-400 leading-relaxed">
+        Укажите параметры объекта для сохранения на карте.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Название события / локации</label>
+          <input id="new-event-title" type="text" class="modal-input" placeholder="Например: Покровский собор">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Подзаголовок</label>
+          <input id="new-event-subtitle" type="text" class="modal-input" placeholder="Краткое уточнение">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Категория</label>
+          <select id="new-event-category" class="modal-input">
+            <option value="combat" selected>Боевые операции</option>
+            <option value="sabotage">Рельсовая война / Диверсии</option>
+            <option value="defense">Оборона и переправы</option>
+            <option value="base">Партизанские базы</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Тип анимации схемы</label>
+          <select id="new-event-anim-type" class="modal-input">
+            <option value="volcano" selected>Штурм / Огневой налет</option>
+            <option value="cyber">Диверсия / Подрыв</option>
+            <option value="radar">Оборона / Разведка</option>
+            <option value="aurora">Опорный пункт</option>
+            <option value="railway">Рельсовая война</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Широта (Latitude)</label>
+          <input id="new-event-lat" type="number" step="any" class="modal-input" placeholder="53.1327">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Долгота (Longitude)</label>
+          <input id="new-event-lng" type="number" step="any" class="modal-input" placeholder="26.0139">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Локация / Район</label>
+          <input id="new-event-location" type="text" class="modal-input" placeholder="Дятловский район">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Дата / Период</label>
+          <input id="new-event-date" type="text" class="modal-input" placeholder="1943–1944 гг.">
+        </div>
+
+        <div class="col-span-1 md:col-span-2">
+          <label class="block text-slate-400 mb-1 font-medium">Краткое описание</label>
+          <textarea id="new-event-short-desc" rows="2" class="modal-input" placeholder="Краткая сводка..."></textarea>
+        </div>
+
+        <div class="col-span-1 md:col-span-2">
+          <label class="block text-slate-400 mb-1 font-medium">Подробный текст</label>
+          <textarea id="new-event-full-desc" rows="3" class="modal-input" placeholder="Исторические сведения, ход операции..."></textarea>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+        <button id="add-live-preview-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded text-xs transition-all shadow-md">
+          <span id="save-event-btn-text">Нанести на карту</span>
+        </button>
+        <button id="generate-json-btn" class="bg-slate-900 hover:bg-slate-800 text-slate-400 font-medium px-4 py-2 rounded text-xs border border-slate-800 transition-all">
+          Скопировать код
+        </button>
+      </div>
+
+      <textarea id="json-output" class="modal-input font-mono text-[11px] text-slate-300 h-28 hidden" readonly></textarea>
+    </div>
+  </div>
+
+  <!-- ================= 6. МОДАЛЬНОЕ ОКНО АВТОРИЗАЦИИ (ВХОД / РЕГИСТРАЦИЯ) ================= -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="modal-card max-w-md">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-xs">
+            🔒
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-white">Авторизация</h3>
+            <p class="text-[11px] text-slate-400">Вход в систему управления картой</p>
+          </div>
+        </div>
+        <button id="close-auth-modal-btn" class="text-slate-400 hover:text-white text-sm" title="Закрыть">✕</button>
+      </div>
+
+      <!-- Вкладки (Вход / Регистрация) -->
+      <div class="flex border-b border-slate-800 -mx-5 px-5 gap-4 text-xs font-medium">
+        <button id="tab-login-btn" class="auth-tab-btn active pb-2 border-b-2 border-emerald-500 text-white">
+          Вход в аккаунт
+        </button>
+        <button id="tab-register-btn" class="auth-tab-btn pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          Регистрация
+        </button>
+      </div>
+
+      <!-- Форма Входа -->
+      <form id="auth-login-form" class="space-y-3 pt-2" onsubmit="return false;">
+        <div id="auth-login-notice" class="hidden p-2 rounded bg-amber-950/40 border border-amber-600/40 text-amber-200 text-xs">
+          Для добавления и редактирования меток требуется войти под аккаунтом администратора.
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Логин</label>
+          <input id="auth-login-username" type="text" class="modal-input" placeholder="admin" autocomplete="username">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Пароль</label>
+          <input id="auth-login-password" type="password" class="modal-input" placeholder="••••••••" autocomplete="current-password">
+        </div>
+
+        <!-- Подсказка с учетными данными -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 text-[11px] text-slate-300">
+          <div class="font-medium text-emerald-400 mb-1 flex items-center gap-1.5">
+            <span>ℹ</span> Аккаунт администратора по умолчанию:
+          </div>
+          <div class="flex items-center justify-between text-slate-400 font-mono">
+            <span>Логин: <strong class="text-white">admin</strong></span>
+            <span>Пароль: <strong class="text-white">admin123</strong></span>
+          </div>
+        </div>
+
+        <div id="auth-login-error" class="hidden text-rose-400 text-xs bg-rose-950/30 border border-rose-800/40 p-2 rounded"></div>
+
+        <button id="auth-login-submit-btn" type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded text-xs transition-all shadow-md">
+          Войти в аккаунт
+        </button>
+      </form>
+
+      <!-- Форма Регистрации -->
+      <form id="auth-register-form" class="space-y-3 pt-2 hidden" onsubmit="return false;">
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Логин</label>
+          <input id="auth-reg-username" type="text" class="modal-input" placeholder="Придумайте логин">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Имя / Псевдоним</label>
+          <input id="auth-reg-name" type="text" class="modal-input" placeholder="Отображаемое имя">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Пароль</label>
+          <input id="auth-reg-password" type="password" class="modal-input" placeholder="Минимум 4 символа">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Роль аккаунта</label>
+          <select id="auth-reg-role" class="modal-input">
+            <option value="admin" selected>Администратор (полный доступ к меткам)</option>
+            <option value="user">Пользователь (только просмотр)</option>
+          </select>
+        </div>
+
+        <div id="auth-reg-msg" class="hidden text-xs p-2 rounded"></div>
+
+        <button id="auth-reg-submit-btn" type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded text-xs transition-all shadow-md">
+          Зарегистрироваться
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= 7. МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ ================= -->
+  <div id="delete-confirm-modal" class="modal-backdrop hidden">
+    <div class="modal-card max-w-sm">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-sm font-semibold text-rose-400 flex items-center gap-2">
+          <span>⚠️</span> Удаление метки
+        </h3>
+        <button id="close-delete-modal-btn" class="text-slate-400 hover:text-white text-sm">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Вы действительно хотите безвозвратно удалить метку:
+      </p>
+      <div id="delete-modal-event-title" class="font-medium text-white text-xs bg-slate-900 border border-slate-800 p-2.5 rounded">
+        Название объекта
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button id="cancel-delete-modal-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-3.5 py-1.5 rounded text-xs border border-slate-700 transition-all">
+          Отмена
+        </button>
+        <button id="confirm-delete-modal-btn" class="bg-rose-600 hover:bg-rose-500 text-white font-medium px-3.5 py-1.5 rounded text-xs transition-all shadow-md">
+          Да, удалить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 8. МОДАЛЬНОЕ ОКНО СМЕНЫ ПАРОЛЯ ================= -->
+  <div id="change-password-modal" class="modal-backdrop hidden">
+    <div class="modal-card max-w-sm">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded bg-amber-950/80 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold text-xs">
+            🔑
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-white">Смена пароля</h3>
+            <p class="text-[11px] text-slate-400">Обновление пароля аккаунта</p>
+          </div>
+        </div>
+        <button id="close-cp-modal-btn" class="text-slate-400 hover:text-white text-sm" title="Закрыть">✕</button>
+      </div>
+
+      <form id="change-password-form" class="space-y-3 pt-2" onsubmit="return false;">
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Текущий пароль</label>
+          <input id="cp-current-password" type="password" class="modal-input" placeholder="Введите текущий пароль" autocomplete="current-password">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Новый пароль</label>
+          <input id="cp-new-password" type="password" class="modal-input" placeholder="Минимум 4 символа" autocomplete="new-password">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 text-xs font-medium">Повторите новый пароль</label>
+          <input id="cp-confirm-password" type="password" class="modal-input" placeholder="Повторите новый пароль" autocomplete="new-password">
+        </div>
+
+        <div id="cp-msg" class="hidden text-xs p-2 rounded"></div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button id="cancel-cp-btn" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-3.5 py-1.5 rounded text-xs border border-slate-700 transition-all">
+            Отмена
+          </button>
+          <button id="cp-submit-btn" type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-1.5 rounded text-xs transition-all shadow-md">
+            Сохранить пароль
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Скрипты приложения -->
+  <script src="js/data.js"></script>
+  <script src="js/animations.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/drawer.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
